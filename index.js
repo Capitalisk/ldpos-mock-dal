@@ -79,6 +79,11 @@ class MockDAL {
     }
   }
 
+  async getAccountsByBalance(order, offset, limit) {
+    return this.sortByProperty(Object.values(this.accounts), 'balance', order, BigInt)
+      .slice(offset, offset + limit);
+  }
+
   async getAccountVotes(voterAddress) {
     let voterAccount = this.accounts[voterAddress];
     if (!voterAccount) {
@@ -281,10 +286,22 @@ class MockDAL {
     return block;
   }
 
-  async upsertTransaction(transaction) {
-    this.transactions[transaction.id] = {
-      ...transaction
-    };
+  async getBlock(id) {
+    let block = this.blocks.find(candidateBlock => candidateBlock.id === id);
+    if (!block) {
+      let error = new Error(
+        `No block existed with ID ${id}`
+      );
+      error.name = 'BlockDidNotExistError';
+      error.type = 'InvalidActionError';
+      throw error;
+    }
+    return block;
+  }
+
+  async getBlocksByTimestamp(order, offset, limit) {
+    return this.sortByProperty(this.blocks, 'timestamp', order)
+      .slice(offset, offset + limit);
   }
 
   async upsertBlock(block, synched) {
@@ -319,6 +336,17 @@ class MockDAL {
       throw error;
     }
     return transaction;
+  }
+
+  async upsertTransaction(transaction) {
+    this.transactions[transaction.id] = {
+      ...transaction
+    };
+  }
+
+  async getTransactionsByTimestamp(order, offset, limit) {
+    return this.sortByProperty(Object.values(this.transactions), 'timestamp', order)
+      .slice(offset, offset + limit);
   }
 
   async getTransactionsFromBlock(blockId, offset, limit) {
@@ -363,7 +391,7 @@ class MockDAL {
     );
   }
 
-  async getTopActiveDelegates(delegateCount) {
+  async getDelegatesByVoteWeight(order, offset, limit) {
     let delegateList = [];
     let delegateAddressList = Object.keys(this.votes);
     for (let delegateAddress of delegateAddressList) {
@@ -378,23 +406,63 @@ class MockDAL {
         voteWeight
       });
     }
+    return this.sortByProperty(delegateList, 'voteWeight', order)
+      .slice(offset, offset + limit)
+      .map((delegate) => {
+        return {
+          ...delegate,
+          voteWeight: delegate.voteWeight.toString()
+        };
+      });
+  }
 
-    delegateList.sort((a, b) => {
-      if (a.voteWeight > b.voteWeight) {
+  sortAsc(list, property, typeCastFunction) {
+    return list.sort((a, b) => {
+      let itemA;
+      let itemB;
+      if (typeCastFunction) {
+        itemA = typeCastFunction(a[property]);
+        itemB = typeCastFunction(b[property]);
+      } else {
+        itemA = a[property];
+        itemB = b[property];
+      }
+      if (itemA > itemB) {
+        return 1;
+      }
+      if (itemA < itemB) {
         return -1;
       }
-      if (a.voteWeight < b.voteWeight) {
+      return 0;
+    });
+  }
+
+  sortDesc(list, property, typeCastFunction) {
+    return list.sort((a, b) => {
+      let itemA;
+      let itemB;
+      if (typeCastFunction) {
+        itemA = typeCastFunction(a[property]);
+        itemB = typeCastFunction(b[property]);
+      } else {
+        itemA = a[property];
+        itemB = b[property];
+      }
+      if (itemA > itemB) {
+        return -1;
+      }
+      if (itemA < itemB) {
         return 1;
       }
       return 0;
     });
+  }
 
-    return delegateList.slice(0, delegateCount).map((delegate) => {
-      return {
-        ...delegate,
-        voteWeight: delegate.voteWeight.toString()
-      };
-    });
+  sortByProperty(list, property, order, typeCastFunction) {
+    if (order === 'asc') {
+      return this.sortAsc(list, property, typeCastFunction);
+    }
+    return this.sortDesc(list, property, typeCastFunction);
   }
 }
 
